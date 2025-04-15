@@ -1,7 +1,7 @@
 import flet as ft
-from database.DB_connect import get_connection
-from model.corso import Corso
-from model.studente import Studente
+from database.corso_DAO import getCorsi
+from database.iscrizione_DAO import getIscrizioni, setIscrizione
+from database.studente_DAO import getStudente
 
 
 class Controller:
@@ -14,26 +14,20 @@ class Controller:
         self.studenti = {}
 
     def cercaIscritti(self, e):
-        p = self._view.ddCorsi.value
-        if p is None:
+        c = self._view.ddCorsi.value
+        if c is None:
             self._view.create_alert("Seleziona un corso")
             self._view.update_page()
             return
-        db = get_connection()
-        cursor = db.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM STUDENTE")
-        for c in cursor:
-            s = Studente(**c)
-            self.studenti[s.matricola] = s
 
-        cursor.execute("SELECT * FROM ISCRIZIONE")
-        for cu in cursor:
-            if cu["codins"] == p:
-                stringa=""
-                stringa = "nome: "+self.studenti[cu["matricola"]].nome+", "+"cognome: "+self.studenti[cu["matricola"]].cognome+", matricola: "+str(self.studenti[cu["matricola"]].matricola) #per accedee al dizionario
+        self.studenti = getStudente()
+        iscrizioni = getIscrizioni()
+
+        for q in iscrizioni:
+            if q[0] == c:
+                stringa = "nome: " + self.studenti[q[1]].nome + ", " + "cognome: " + self.studenti[q[1]].cognome + ", matricola: " + str(self.studenti[q[1]].matricola)  # per accedee al dizionario
                 self._view.lv.controls.append(ft.Text(stringa))
                 self._view.update_page()
-        db.close()
 
     def cercaStudente(self, e):
         m = self._view.matricola.value()
@@ -42,20 +36,18 @@ class Controller:
             self._view.update_page()
             return
         elif m.isdigit():
-            db = get_connection()
-            cursor = db.cursor(dictionary = True)
-            cursor.execute("SELECT * FROM STUDENTE")
-            self.studenti.clear()  #mi svuota ciò che c'era prima delntro a quel dizionario
-            for c in cursor:
-                s = Studente(**c)
-                self.studenti[s.matricola] = s
-                db.close()
+            self.studenti = getStudente()
+
             if self.studenti.__contains__(int(m)):
-                self._view.nome.value(self.studenti[int(m)].nome)
-                self._view.cognome.value(self.studenti[int(m)].cognome)
+                nome = self.studenti[int(m)].nome
+                cognome = self.studenti[int(m)].cognome
+                self._view.nome.value = nome
+                self._view.cognome.value = cognome
                 self._view.update_page()
             else:
                 self._view.create_alert("La matricola inserita non esiste")
+                self._view.update_page()
+                return
 
 
     def cercaCorsi(self, e):
@@ -65,14 +57,11 @@ class Controller:
             self._view.update_page()
             return
         elif m.isdigit():
-            db = get_connection()
-            cursor = db.cursor(dictionary = True)
-            cursor.execute("SELECT * FROM ISCRIZIONE")
-            self.studenti.clear()
+            iscrizioni = getIscrizioni()
             trovato = 0
-            for c in cursor:
-                if c["matricola"] == int(m):
-                    stringa = ""
+
+            for c in iscrizioni:
+                if c[1] == int(m):
                     stringa = "Codice corso: "+c["codins"]
                     self._view.lv.controls.append(ft.Text(stringa))
                     self._view.update_page()
@@ -94,36 +83,23 @@ class Controller:
                 self._view.create_alert("Seleziona un corso")
                 self._view.update_page()
                 return
-            db = get_connection()
-            cursor = db.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM STUDENTE")
-            self.studenti.clear()
-            for c in cursor:
-                s = Studente(**c)
-                self.studenti[s.matricola] = s
+
+            self.studenti = getIscrizioni()
+
             if self.studenti.__contains__(int(m)):
-                cursor.execute("SELECT * FROM ISCRIZIONE")
-                for cu in cursor:
-                    if cu["codins"] == cod and cu["matricola"] == int(m):
+                iscrizioni = getIscrizioni()
+                for cu in iscrizioni:
+                    if cu[0] == cod and cu[1] == int(m):
                         self._view.create_alert("Studente già iscritto a questo corso")
                         self._view.update_page()
                         return
                 query = "INSERT INTO 'iscrizione' ('matricola', 'codins') VALUES ("+str(m)+", '"+cod+"')"
-                cursor.execute(query)
-
-
+                dati = (m, cod)
+                setIscrizione(query, dati)
 
     def fillCorsi(self):
-        db=get_connection()
-        cursor=db.cursor(dictionary=True)  #crea dizionario con info che trova su quella riga
-                                            # -> per ogni riga del database mi crea una riga del dizionario
 
-        cursor.execute("SELECT * FROM CORSO")
-        for c in cursor:
-            x = Corso(**c)   #prende tutto ciò che trova in c e lo mette dentro a
-                                # corsi senza che io debba specificare
-                            #attenzione all'ordine con cui metto gli attributi nella dataclass
-            self.corsi.append(x)
-            self._view.ddCorsi.options.append(ft.dropdown.Option(key=x.codins, text=x.nome))
+        corsi = getCorsi()
 
-        db.close()
+        for c in corsi:
+            self._view.ddCorsi.options.append(ft.dropdown.Option(key=c.codins, text=c.nome))
